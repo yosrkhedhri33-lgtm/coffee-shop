@@ -20,7 +20,7 @@ const MENU = [
 
 const TABLES = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
 
-const formatPrice = (p) => p.toFixed(2) + " €";
+const formatPrice = (p) => Number(p).toFixed(2) + " €";
 const now = () => new Date().toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" });
 
 export default function App() {
@@ -32,6 +32,11 @@ export default function App() {
   const [orderPlaced, setOrderPlaced] = useState(false);
   const [notification, setNotification] = useState(null);
   const [cashierTab, setCashierTab] = useState("live");
+  // Cashier detail state
+  const [selectedOrderId, setSelectedOrderId] = useState(null);
+  const [splitMode, setSplitMode] = useState(false);
+  const [splitSelected, setSplitSelected] = useState(new Set());
+  const [totalRevenue, setTotalRevenue] = useState(0);
 
   const categories = [...new Set(MENU.map((i) => i.category))];
 
@@ -50,10 +55,9 @@ export default function App() {
   };
 
   const updateQty = (id, delta) => {
-    setCart((prev) => {
-      const updated = prev.map((c) => c.id === id ? { ...c, qty: c.qty + delta } : c).filter((c) => c.qty > 0);
-      return updated;
-    });
+    setCart((prev) =>
+      prev.map((c) => c.id === id ? { ...c, qty: c.qty + delta } : c).filter((c) => c.qty > 0)
+    );
   };
 
   const cartTotal = cart.reduce((s, i) => s + i.price * i.qty, 0);
@@ -64,7 +68,7 @@ export default function App() {
     const order = {
       id: Date.now(),
       table: selectedTable,
-      items: [...cart],
+      items: cart.map((i) => ({ ...i, paid: false })),
       total: cartTotal,
       time: now(),
       status: "nouveau",
@@ -77,6 +81,21 @@ export default function App() {
   };
 
   const updateOrderStatus = (id, status) => {
+    if (status === "payé") {
+      const order = orders.find((o) => o.id === id);
+      if (order) {
+        const amount = order.items.reduce((s, i) => s + i.price * i.qty, 0);
+        setTotalRevenue((r) => r + amount);
+        setOrders((prev) => prev.filter((o) => o.id !== id));
+        if (selectedOrderId === id) {
+          setSelectedOrderId(null);
+          setSplitMode(false);
+          setSplitSelected(new Set());
+        }
+        showNotif("Commande encaissée ✓");
+      }
+      return;
+    }
     setOrders((prev) =>
       prev.map((o) =>
         o.id === id ? { ...o, status, statusHistory: [...o.statusHistory, { status, time: now() }] } : o
@@ -84,9 +103,44 @@ export default function App() {
     );
   };
 
+  const toggleSplitItem = (itemId) => {
+    setSplitSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(itemId)) next.delete(itemId);
+      else next.add(itemId);
+      return next;
+    });
+  };
+
+  const paySelectedItems = () => {
+    const order = orders.find((o) => o.id === selectedOrderId);
+    if (!order) return;
+    let paid = 0;
+    const updatedItems = order.items.map((item) => {
+      if (splitSelected.has(item.id) && !item.paid) {
+        paid += item.price * item.qty;
+        return { ...item, paid: true };
+      }
+      return item;
+    });
+    setTotalRevenue((r) => r + paid);
+    setSplitSelected(new Set());
+    const allPaid = updatedItems.every((i) => i.paid);
+    if (allPaid) {
+      setOrders((prev) => prev.filter((o) => o.id !== order.id));
+      setSelectedOrderId(null);
+      setSplitMode(false);
+      showNotif("Table soldée entièrement ✓");
+    } else {
+      setOrders((prev) =>
+        prev.map((o) => o.id === order.id ? { ...o, items: updatedItems } : o)
+      );
+      showNotif("Paiement partiel enregistré ✓");
+    }
+  };
+
   const liveOrders = orders.filter((o) => o.status !== "payé");
   const paidOrders = orders.filter((o) => o.status === "payé");
-  const totalRevenue = paidOrders.reduce((s, o) => s + o.total, 0);
 
   const STATUS_CONFIG = {
     nouveau: { label: "Nouveau", color: "#E24B4A", bg: "#FCEBEB" },
@@ -140,7 +194,7 @@ export default function App() {
           <div style={{ display: "grid", gridTemplateColumns: "repeat(5, 1fr)", gap: 12 }}>
             {TABLES.map((t) => (
               <button key={t} onClick={() => { setSelectedTable(t); setOrderPlaced(false); setView("menu"); }}
-                style={{ background: "#1A0F00", color: "#F5E6C8", border: "none", borderRadius: 14, padding: "20px 0", fontSize: 22, fontWeight: 700, cursor: "pointer", fontFamily: "inherit", transition: "transform 0.1s", boxShadow: "0 4px 12px rgba(0,0,0,0.15)" }}>
+                style={{ background: "#1A0F00", color: "#F5E6C8", border: "none", borderRadius: 14, padding: "20px 0", fontSize: 22, fontWeight: 700, cursor: "pointer", fontFamily: "inherit", boxShadow: "0 4px 12px rgba(0,0,0,0.15)" }}>
                 {t}
               </button>
             ))}
@@ -280,10 +334,174 @@ export default function App() {
   if (view === "cashier") {
     const tablesSummary = TABLES.map((t) => {
       const tableOrders = liveOrders.filter((o) => o.table === t);
-      const total = tableOrders.reduce((s, o) => s + o.total, 0);
+      const total = tableOrders.reduce((s, o) => s + o.items.reduce((ss, i) => ss + i.price * i.qty, 0), 0);
       return { table: t, count: tableOrders.length, total, latest: tableOrders[0] };
     }).filter((t) => t.count > 0);
 
+    // ─── ORDER DETAIL VIEW ───────────────────────────────
+    if (selectedOrderId) {
+      const order = liveOrders.find((o) => o.id === selectedOrderId);
+      if (!order) {
+        setSelectedOrderId(null);
+        return null;
+      }
+      const allItems = order.items;
+      const paidItems = allItems.filter((i) => i.paid);
+      const unpaidItems = allItems.filter((i) => !i.paid);
+      const totalAll = allItems.reduce((s, i) => s + i.price * i.qty, 0);
+      const totalPaid = paidItems.reduce((s, i) => s + i.price * i.qty, 0);
+      const totalUnpaid = unpaidItems.reduce((s, i) => s + i.price * i.qty, 0);
+      const splitAmt = [...splitSelected].reduce((s, id) => {
+        const item = allItems.find((i) => i.id === id);
+        return s + (item ? item.price * item.qty : 0);
+      }, 0);
+      const pct = totalAll > 0 ? Math.round((totalPaid / totalAll) * 100) : 0;
+
+      const NEXT_STATUS = { "en préparation": "prêt", prêt: "servi", servi: "payé" };
+      const NEXT_LABEL = { "en préparation": "✓ Marquer prêt", prêt: "🚀 Servir", servi: "💳 Encaisser tout" };
+
+      return (
+        <div style={{ minHeight: "100vh", background: "#F8F4EE", fontFamily: "-apple-system, 'Segoe UI', sans-serif" }}>
+          {/* Header */}
+          <div style={{ background: "#1A0F00", padding: "18px 24px" }}>
+            <div style={{ maxWidth: 600, margin: "0 auto", display: "flex", alignItems: "center", gap: 12 }}>
+              <button onClick={() => { setSelectedOrderId(null); setSplitMode(false); setSplitSelected(new Set()); }}
+                style={{ background: "transparent", border: "none", color: "#B89A6A", fontSize: 22, cursor: "pointer", padding: 0 }}>←</button>
+              <div style={{ flex: 1 }}>
+                <h2 style={{ color: "#F5E6C8", margin: 0, fontSize: 20, fontWeight: 700 }}>Table {order.table}</h2>
+                <p style={{ color: "#8C6B3E", margin: "2px 0 0", fontSize: 13 }}>{order.time} · {allItems.length} article{allItems.length > 1 ? "s" : ""}</p>
+              </div>
+              <StatusBadge status={order.status} />
+            </div>
+          </div>
+
+          <div style={{ maxWidth: 600, margin: "0 auto", padding: 20 }}>
+            {/* Progress bar */}
+            {totalPaid > 0 && (
+              <div style={{ marginBottom: 18 }}>
+                <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13, color: "#8C6B3E", marginBottom: 6 }}>
+                  <span>Progression du paiement</span>
+                  <span style={{ fontWeight: 600 }}>{pct}% réglé</span>
+                </div>
+                <div style={{ height: 6, background: "#E2C898", borderRadius: 3, overflow: "hidden" }}>
+                  <div style={{ height: "100%", width: `${pct}%`, background: "#3B6D11", borderRadius: 3, transition: "width 0.3s" }} />
+                </div>
+              </div>
+            )}
+
+            {/* Split mode banner */}
+            {splitMode && (
+              <div style={{ background: "#FAEEDA", border: "1px solid #E2C898", borderRadius: 10, padding: "10px 16px", marginBottom: 14, display: "flex", alignItems: "center", gap: 8, fontSize: 13, color: "#854F0B" }}>
+                <span>👥</span>
+                <span>Mode paiement individuel — cochez les articles à régler</span>
+              </div>
+            )}
+
+            {/* Items table */}
+            <div style={{ background: "#FFF", borderRadius: 16, border: "1.5px solid #E2C898", overflow: "hidden", marginBottom: 16 }}>
+              {/* Table header */}
+              <div style={{ display: "grid", gridTemplateColumns: splitMode ? "1fr 48px 72px 80px 40px" : "1fr 48px 72px 80px", gap: 0, padding: "10px 16px", borderBottom: "1px solid #F0E8D8", background: "#FDF6EC" }}>
+                {["Article", "Qté", "Prix u.", "Sous-total", ...(splitMode ? ["✓"] : [])].map((h, i) => (
+                  <div key={i} style={{ fontSize: 11, fontWeight: 600, color: "#8C6B3E", textTransform: "uppercase", letterSpacing: "0.05em", textAlign: i > 0 ? "right" : "left" }}>{h}</div>
+                ))}
+              </div>
+
+              {allItems.map((item) => {
+                const isPaid = item.paid;
+                const isSelected = splitSelected.has(item.id);
+                return (
+                  <div
+                    key={item.id}
+                    onClick={() => splitMode && !isPaid && toggleSplitItem(item.id)}
+                    style={{
+                      display: "grid",
+                      gridTemplateColumns: splitMode ? "1fr 48px 72px 80px 40px" : "1fr 48px 72px 80px",
+                      gap: 0,
+                      padding: "12px 16px",
+                      borderBottom: "1px solid #F0E8D8",
+                      cursor: splitMode && !isPaid ? "pointer" : "default",
+                      background: isPaid ? "#F8F4EE" : isSelected ? "#EAF3DE" : "#FFF",
+                      transition: "background 0.15s",
+                    }}
+                  >
+                    <div style={{ fontSize: 14, color: isPaid ? "#B89A6A" : "#1A0F00", textDecoration: isPaid ? "line-through" : "none", display: "flex", alignItems: "center", gap: 6 }}>
+                      <span>{item.emoji}</span>
+                      <span>{item.name}</span>
+                      {isPaid && <span style={{ background: "#EAF3DE", color: "#3B6D11", fontSize: 10, fontWeight: 700, padding: "2px 6px", borderRadius: 8 }}>PAYÉ</span>}
+                    </div>
+                    <div style={{ fontSize: 14, color: isPaid ? "#B89A6A" : "#1A0F00", textAlign: "right", textDecoration: isPaid ? "line-through" : "none" }}>{item.qty}</div>
+                    <div style={{ fontSize: 14, color: isPaid ? "#B89A6A" : "#8C6B3E", textAlign: "right", textDecoration: isPaid ? "line-through" : "none" }}>{formatPrice(item.price)}</div>
+                    <div style={{ fontSize: 14, fontWeight: 700, color: isPaid ? "#B89A6A" : "#1A0F00", textAlign: "right", textDecoration: isPaid ? "line-through" : "none" }}>{formatPrice(item.price * item.qty)}</div>
+                    {splitMode && (
+                      <div style={{ display: "flex", alignItems: "center", justifyContent: "flex-end" }}>
+                        {isPaid
+                          ? <span style={{ color: "#3B6D11", fontSize: 16 }}>✓</span>
+                          : <input type="checkbox" checked={isSelected} onChange={() => toggleSplitItem(item.id)} onClick={(e) => e.stopPropagation()} style={{ width: 16, height: 16, cursor: "pointer", accentColor: "#C8882A" }} />
+                        }
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+
+              {/* Totals */}
+              {totalPaid > 0 && (
+                <div style={{ padding: "10px 16px", background: "#F8F4EE", borderTop: "1px solid #F0E8D8", display: "flex", justifyContent: "space-between", fontSize: 13 }}>
+                  <span style={{ color: "#8C6B3E" }}>Déjà payé</span>
+                  <span style={{ color: "#3B6D11", fontWeight: 700 }}>{formatPrice(totalPaid)}</span>
+                </div>
+              )}
+
+              {splitMode && splitSelected.size > 0 && (
+                <div style={{ padding: "10px 16px", background: "#EAF3DE", borderTop: "1px solid #C0DD97", display: "flex", justifyContent: "space-between", fontSize: 13 }}>
+                  <span style={{ color: "#3B6D11" }}>Sélection à encaisser</span>
+                  <span style={{ color: "#3B6D11", fontWeight: 700 }}>{formatPrice(splitAmt)}</span>
+                </div>
+              )}
+
+              <div style={{ padding: "14px 16px", background: "#1A0F00", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                <span style={{ color: "#B89A6A", fontSize: 13 }}>Reste à payer</span>
+                <span style={{ color: "#F5E6C8", fontSize: 22, fontWeight: 700 }}>{formatPrice(totalUnpaid)}</span>
+              </div>
+            </div>
+
+            {/* Actions */}
+            <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+              {!splitMode ? (
+                <>
+                  <button onClick={() => { setSplitMode(true); setSplitSelected(new Set()); }}
+                    style={{ flex: 1, minWidth: 160, background: "#FFF", color: "#1A0F00", border: "1.5px solid #E2C898", borderRadius: 12, padding: "13px 16px", fontSize: 14, fontWeight: 600, cursor: "pointer", fontFamily: "inherit" }}>
+                    👥 Paiement individuel
+                  </button>
+                  {NEXT_STATUS[order.status] && (
+                    <button onClick={() => updateOrderStatus(order.id, NEXT_STATUS[order.status])}
+                      style={{ flex: 1, minWidth: 140, background: order.status === "servi" ? "#EAF3DE" : "#C8882A", color: order.status === "servi" ? "#3B6D11" : "#FFF", border: order.status === "servi" ? "1.5px solid #C0DD97" : "none", borderRadius: 12, padding: "13px 16px", fontSize: 14, fontWeight: 700, cursor: "pointer", fontFamily: "inherit" }}>
+                      {NEXT_LABEL[order.status]}
+                    </button>
+                  )}
+                </>
+              ) : (
+                <>
+                  <button onClick={() => { setSplitMode(false); setSplitSelected(new Set()); }}
+                    style={{ background: "#FFF", color: "#8C6B3E", border: "1.5px solid #E2C898", borderRadius: 12, padding: "13px 20px", fontSize: 14, cursor: "pointer", fontFamily: "inherit" }}>
+                    Annuler
+                  </button>
+                  {splitSelected.size > 0 && (
+                    <button onClick={paySelectedItems}
+                      style={{ flex: 1, background: "#EAF3DE", color: "#3B6D11", border: "1.5px solid #C0DD97", borderRadius: 12, padding: "13px 16px", fontSize: 14, fontWeight: 700, cursor: "pointer", fontFamily: "inherit" }}>
+                      Encaisser {formatPrice(splitAmt)} →
+                    </button>
+                  )}
+                </>
+              )}
+            </div>
+          </div>
+          {notification && <Notif n={notification} />}
+        </div>
+      );
+    }
+
+    // ─── CASHIER MAIN ───────────────────────────────────────
     return (
       <div style={{ minHeight: "100vh", background: "#F8F4EE", fontFamily: "-apple-system, 'Segoe UI', sans-serif" }}>
         <div style={{ background: "#1A0F00", padding: "18px 24px" }}>
@@ -316,7 +534,9 @@ export default function App() {
             {[["live", "Commandes actives"], ["tables", "Par table"], ["history", "Historique"]].map(([k, l]) => (
               <button key={k} onClick={() => setCashierTab(k)}
                 style={{ background: cashierTab === k ? "#1A0F00" : "#FFF", color: cashierTab === k ? "#F5E6C8" : "#8C6B3E", border: "1.5px solid", borderColor: cashierTab === k ? "transparent" : "#E2C898", borderRadius: 10, padding: "9px 18px", fontSize: 14, fontWeight: cashierTab === k ? 700 : 400, cursor: "pointer" }}>
-                {l} {k === "live" && liveOrders.length > 0 && <span style={{ background: "#E24B4A", color: "#FFF", borderRadius: 10, padding: "1px 6px", fontSize: 11, marginLeft: 6 }}>{liveOrders.length}</span>}
+                {l} {k === "live" && liveOrders.length > 0 && (
+                  <span style={{ background: "#E24B4A", color: "#FFF", borderRadius: 10, padding: "1px 6px", fontSize: 11, marginLeft: 6 }}>{liveOrders.length}</span>
+                )}
               </button>
             ))}
           </div>
@@ -326,7 +546,14 @@ export default function App() {
             <div style={{ display: "grid", gap: 12 }}>
               {liveOrders.length === 0 && <EmptyState text="Aucune commande active" icon="🎉" />}
               {liveOrders.map((order) => (
-                <OrderCard key={order.id} order={order} onUpdate={updateOrderStatus} StatusBadge={StatusBadge} formatPrice={formatPrice} />
+                <OrderCard
+                  key={order.id}
+                  order={order}
+                  onUpdate={updateOrderStatus}
+                  onSelect={(id) => { setSelectedOrderId(id); setSplitMode(false); setSplitSelected(new Set()); }}
+                  StatusBadge={StatusBadge}
+                  formatPrice={formatPrice}
+                />
               ))}
             </div>
           )}
@@ -336,10 +563,14 @@ export default function App() {
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(200px, 1fr))", gap: 12 }}>
               {TABLES.map((t) => {
                 const tOrders = liveOrders.filter((o) => o.table === t);
-                const total = tOrders.reduce((s, o) => s + o.total, 0);
+                const total = tOrders.reduce((s, o) => s + o.items.reduce((ss, i) => ss + i.price * i.qty, 0), 0);
                 const hasOrder = tOrders.length > 0;
                 return (
-                  <div key={t} style={{ background: hasOrder ? "#FFF" : "#F8F4EE", borderRadius: 14, padding: "18px", border: hasOrder ? "2px solid #C8882A" : "1.5px solid #E2C898", transition: "all 0.2s" }}>
+                  <div
+                    key={t}
+                    onClick={() => { if (hasOrder) { setSelectedOrderId(tOrders[0].id); setSplitMode(false); setSplitSelected(new Set()); } }}
+                    style={{ background: hasOrder ? "#FFF" : "#F8F4EE", borderRadius: 14, padding: "18px", border: hasOrder ? "2px solid #C8882A" : "1.5px solid #E2C898", cursor: hasOrder ? "pointer" : "default", transition: "all 0.2s" }}
+                  >
                     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
                       <span style={{ fontSize: 28, fontWeight: 800, color: hasOrder ? "#C8882A" : "#C5B89A" }}>T{t}</span>
                       {hasOrder && <span style={{ background: "#FCEBEB", color: "#A32D2D", fontSize: 11, fontWeight: 700, padding: "3px 8px", borderRadius: 8 }}>{tOrders.length} cmd</span>}
@@ -347,9 +578,14 @@ export default function App() {
                     {hasOrder ? (
                       <>
                         <div style={{ fontSize: 20, fontWeight: 800, color: "#1A0F00" }}>{formatPrice(total)}</div>
-                        <div style={{ fontSize: 12, color: "#8C6B3E", marginTop: 4 }}>
+                        <div style={{ fontSize: 12, color: "#8C6B3E", marginTop: 6, display: "flex", gap: 4, flexWrap: "wrap" }}>
                           {tOrders.map((o) => <StatusBadge key={o.id} status={o.status} />)}
                         </div>
+                        {tOrders.some((o) => o.items.some((i) => i.paid)) && (
+                          <div style={{ fontSize: 11, color: "#3B6D11", marginTop: 4 }}>
+                            Paiement partiel en cours
+                          </div>
+                        )}
                       </>
                     ) : (
                       <div style={{ color: "#C5B89A", fontSize: 13 }}>Libre</div>
@@ -372,7 +608,7 @@ export default function App() {
                     <div style={{ fontSize: 12, color: "#B89A6A", marginTop: 4 }}>{order.items.map((i) => `${i.qty}× ${i.name}`).join(", ")}</div>
                   </div>
                   <div style={{ textAlign: "right" }}>
-                    <div style={{ fontWeight: 800, color: "#3B6D11", fontSize: 18 }}>{formatPrice(order.total)}</div>
+                    <div style={{ fontWeight: 800, color: "#3B6D11", fontSize: 18 }}>{formatPrice(order.items.reduce((s, i) => s + i.price * i.qty, 0))}</div>
                     <StatusBadge status="payé" />
                   </div>
                 </div>
@@ -388,10 +624,15 @@ export default function App() {
   return null;
 }
 
-function OrderCard({ order, onUpdate, StatusBadge, formatPrice }) {
-  const NEXT = { nouveau: "en préparation", "en préparation": "prêt", prêt: "servi", servi: "payé" };
-  const NEXT_LABEL = { nouveau: "▶ Préparer", "en préparation": "✓ Prêt", prêt: "🚀 Servir", servi: "💳 Encaisser" };
+function OrderCard({ order, onUpdate, onSelect, StatusBadge, formatPrice }) {
+  const NEXT = { "en préparation": "prêt", prêt: "servi", servi: "payé" };
+  const NEXT_LABEL = { "en préparation": "✓ Prêt", prêt: "🚀 Servir", servi: "💳 Encaisser tout" };
   const [expanded, setExpanded] = useState(true);
+
+  const totalAll = order.items.reduce((s, i) => s + i.price * i.qty, 0);
+  const totalPaid = order.items.filter((i) => i.paid).reduce((s, i) => s + i.price * i.qty, 0);
+  const totalUnpaid = totalAll - totalPaid;
+  const hasPartialPayment = totalPaid > 0;
 
   return (
     <div style={{ background: "#FFF", borderRadius: 16, border: "1.5px solid #E2C898", overflow: "hidden", boxShadow: "0 2px 8px rgba(0,0,0,0.05)" }}>
@@ -404,27 +645,48 @@ function OrderCard({ order, onUpdate, StatusBadge, formatPrice }) {
             <StatusBadge status={order.status} />
             <span style={{ color: "#B89A6A", fontSize: 12 }}>{order.time}</span>
           </div>
-          <div style={{ fontSize: 13, color: "#8C6B3E" }}>{order.items.length} article{order.items.length > 1 ? "s" : ""}</div>
+          <div style={{ fontSize: 13, color: "#8C6B3E" }}>
+            {order.items.length} article{order.items.length > 1 ? "s" : ""}
+            {hasPartialPayment && <span style={{ marginLeft: 8, color: "#3B6D11", fontSize: 11, fontWeight: 600 }}>• Paiement partiel</span>}
+          </div>
         </div>
-        <div style={{ fontWeight: 800, fontSize: 20, color: "#1A0F00" }}>{formatPrice(order.total)}</div>
+        <div style={{ textAlign: "right" }}>
+          {hasPartialPayment ? (
+            <>
+              <div style={{ fontWeight: 800, fontSize: 18, color: "#1A0F00" }}>{formatPrice(totalUnpaid)}</div>
+              <div style={{ fontSize: 11, color: "#8C6B3E" }}>reste / {formatPrice(totalAll)}</div>
+            </>
+          ) : (
+            <div style={{ fontWeight: 800, fontSize: 20, color: "#1A0F00" }}>{formatPrice(totalAll)}</div>
+          )}
+        </div>
         <span style={{ color: "#C5B89A", fontSize: 16 }}>{expanded ? "▲" : "▼"}</span>
       </div>
       {expanded && (
         <div style={{ borderTop: "1px solid #F0E8D8", padding: "12px 18px 16px" }}>
           <div style={{ display: "grid", gap: 6, marginBottom: 14 }}>
             {order.items.map((item) => (
-              <div key={item.id} style={{ display: "flex", justifyContent: "space-between", fontSize: 14 }}>
-                <span style={{ color: "#1A0F00" }}><span style={{ color: "#C8882A", fontWeight: 700 }}>{item.qty}×</span> {item.emoji} {item.name}</span>
+              <div key={item.id} style={{ display: "flex", justifyContent: "space-between", fontSize: 14, opacity: item.paid ? 0.5 : 1 }}>
+                <span style={{ color: "#1A0F00", textDecoration: item.paid ? "line-through" : "none" }}>
+                  <span style={{ color: "#C8882A", fontWeight: 700 }}>{item.qty}×</span> {item.emoji} {item.name}
+                  {item.paid && <span style={{ marginLeft: 6, fontSize: 10, background: "#EAF3DE", color: "#3B6D11", padding: "1px 5px", borderRadius: 6, fontWeight: 600 }}>payé</span>}
+                </span>
                 <span style={{ color: "#8C6B3E" }}>{formatPrice(item.price * item.qty)}</span>
               </div>
             ))}
           </div>
-          {NEXT[order.status] && (
-            <button onClick={() => onUpdate(order.id, NEXT[order.status])}
-              style={{ width: "100%", background: "#1A0F00", color: "#F5E6C8", border: "none", borderRadius: 10, padding: "12px", fontSize: 14, fontWeight: 700, cursor: "pointer" }}>
-              {NEXT_LABEL[order.status]}
+          <div style={{ display: "flex", gap: 8 }}>
+            <button onClick={() => onSelect(order.id)}
+              style={{ flex: 1, background: "#FFF8EE", color: "#C8882A", border: "1.5px solid #E2C898", borderRadius: 10, padding: "10px", fontSize: 13, fontWeight: 600, cursor: "pointer" }}>
+              👁 Détail & paiement
             </button>
-          )}
+            {NEXT[order.status] && (
+              <button onClick={() => onUpdate(order.id, NEXT[order.status])}
+                style={{ flex: 1, background: order.status === "servi" ? "#EAF3DE" : "#1A0F00", color: order.status === "servi" ? "#3B6D11" : "#F5E6C8", border: order.status === "servi" ? "1.5px solid #C0DD97" : "none", borderRadius: 10, padding: "10px", fontSize: 13, fontWeight: 700, cursor: "pointer" }}>
+                {NEXT_LABEL[order.status]}
+              </button>
+            )}
+          </div>
         </div>
       )}
     </div>
