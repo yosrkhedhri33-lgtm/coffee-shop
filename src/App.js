@@ -1,0 +1,458 @@
+import { useState } from "react";
+
+const MENU = [
+  { id: 1, category: "Cafés chauds", name: "Espresso", price: 2.5, description: "Intense et corsé", emoji: "☕", prep: 2 },
+  { id: 2, category: "Cafés chauds", name: "Cappuccino", price: 4.0, description: "Mousse de lait soyeuse", emoji: "☕", prep: 3 },
+  { id: 3, category: "Cafés chauds", name: "Latte", price: 4.5, description: "Doux et crémeux", emoji: "☕", prep: 3 },
+  { id: 4, category: "Cafés chauds", name: "Flat White", price: 4.2, description: "Café australien intense", emoji: "☕", prep: 3 },
+  { id: 5, category: "Cafés chauds", name: "Americano", price: 3.0, description: "Long et équilibré", emoji: "☕", prep: 2 },
+  { id: 6, category: "Cafés froids", name: "Cold Brew", price: 5.0, description: "Infusé 12h à froid", emoji: "🧊", prep: 1 },
+  { id: 7, category: "Cafés froids", name: "Iced Latte", price: 5.5, description: "Rafraîchissant et doux", emoji: "🧊", prep: 2 },
+  { id: 8, category: "Cafés froids", name: "Frappuccino", price: 6.0, description: "Frappé onctueux", emoji: "🧊", prep: 3 },
+  { id: 9, category: "Boissons", name: "Chocolat chaud", price: 4.0, description: "Riche et réconfortant", emoji: "🍫", prep: 3 },
+  { id: 10, category: "Boissons", name: "Thé matcha", price: 4.5, description: "Cérémonie japonaise", emoji: "🍵", prep: 3 },
+  { id: 11, category: "Boissons", name: "Jus d'orange", price: 3.5, description: "Pressé frais", emoji: "🍊", prep: 2 },
+  { id: 12, category: "Snacks", name: "Croissant", price: 2.5, description: "Beurré, feuilleté", emoji: "🥐", prep: 1 },
+  { id: 13, category: "Snacks", name: "Muffin myrtilles", price: 3.0, description: "Moelleux et fruité", emoji: "🧁", prep: 1 },
+  { id: 14, category: "Snacks", name: "Cookie chocolat", price: 2.8, description: "Croustillant et fondant", emoji: "🍪", prep: 1 },
+  { id: 15, category: "Snacks", name: "Avocado toast", price: 7.5, description: "Pain au levain", emoji: "🥑", prep: 5 },
+];
+
+const TABLES = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
+
+const formatPrice = (p) => p.toFixed(2) + " €";
+const now = () => new Date().toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" });
+
+export default function App() {
+  const [view, setView] = useState("home");
+  const [selectedTable, setSelectedTable] = useState(null);
+  const [cart, setCart] = useState([]);
+  const [orders, setOrders] = useState([]);
+  const [activeCategory, setActiveCategory] = useState("Cafés chauds");
+  const [orderPlaced, setOrderPlaced] = useState(false);
+  const [notification, setNotification] = useState(null);
+  const [cashierTab, setCashierTab] = useState("live");
+
+  const categories = [...new Set(MENU.map((i) => i.category))];
+
+  const showNotif = (msg, type = "success") => {
+    setNotification({ msg, type });
+    setTimeout(() => setNotification(null), 3000);
+  };
+
+  const addToCart = (item) => {
+    setCart((prev) => {
+      const ex = prev.find((c) => c.id === item.id);
+      if (ex) return prev.map((c) => c.id === item.id ? { ...c, qty: c.qty + 1 } : c);
+      return [...prev, { ...item, qty: 1 }];
+    });
+    showNotif(`${item.name} ajouté !`);
+  };
+
+  const updateQty = (id, delta) => {
+    setCart((prev) => {
+      const updated = prev.map((c) => c.id === id ? { ...c, qty: c.qty + delta } : c).filter((c) => c.qty > 0);
+      return updated;
+    });
+  };
+
+  const cartTotal = cart.reduce((s, i) => s + i.price * i.qty, 0);
+  const cartCount = cart.reduce((s, i) => s + i.qty, 0);
+
+  const placeOrder = () => {
+    if (!cart.length || !selectedTable) return;
+    const order = {
+      id: Date.now(),
+      table: selectedTable,
+      items: [...cart],
+      total: cartTotal,
+      time: now(),
+      status: "nouveau",
+      statusHistory: [{ status: "nouveau", time: now() }],
+    };
+    setOrders((prev) => [order, ...prev]);
+    setCart([]);
+    setOrderPlaced(true);
+    showNotif("Commande envoyée à la caisse !");
+  };
+
+  const updateOrderStatus = (id, status) => {
+    setOrders((prev) =>
+      prev.map((o) =>
+        o.id === id ? { ...o, status, statusHistory: [...o.statusHistory, { status, time: now() }] } : o
+      )
+    );
+  };
+
+  const liveOrders = orders.filter((o) => o.status !== "payé");
+  const paidOrders = orders.filter((o) => o.status === "payé");
+  const totalRevenue = paidOrders.reduce((s, o) => s + o.total, 0);
+
+  const STATUS_CONFIG = {
+    nouveau: { label: "Nouveau", color: "#E24B4A", bg: "#FCEBEB" },
+    "en préparation": { label: "En préparation", color: "#BA7517", bg: "#FAEEDA" },
+    prêt: { label: "Prêt", color: "#3B6D11", bg: "#EAF3DE" },
+    servi: { label: "Servi", color: "#185FA5", bg: "#E6F1FB" },
+    payé: { label: "Payé", color: "#5F5E5A", bg: "#F1EFE8" },
+  };
+
+  const StatusBadge = ({ status }) => {
+    const cfg = STATUS_CONFIG[status] || STATUS_CONFIG.nouveau;
+    return (
+      <span style={{ background: cfg.bg, color: cfg.color, fontSize: 11, fontWeight: 600, padding: "3px 10px", borderRadius: 20, letterSpacing: "0.03em", textTransform: "uppercase" }}>
+        {cfg.label}
+      </span>
+    );
+  };
+
+  // ─── HOME ───────────────────────────────────────────────
+  if (view === "home") {
+    return (
+      <div style={{ minHeight: "100vh", background: "#1A0F00", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: 24, fontFamily: "'Georgia', serif" }}>
+        <div style={{ textAlign: "center", maxWidth: 420 }}>
+          <div style={{ fontSize: 64, marginBottom: 16 }}>☕</div>
+          <h1 style={{ color: "#F5E6C8", fontSize: 42, fontWeight: 700, margin: "0 0 8px", letterSpacing: "-1px", lineHeight: 1 }}>Café Lumière</h1>
+          <p style={{ color: "#B89A6A", fontSize: 16, marginBottom: 48, fontStyle: "italic" }}>Commandez depuis votre table</p>
+          <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+            <button onClick={() => setView("table-select")}
+              style={{ background: "#C8882A", color: "#FFF8EE", border: "none", borderRadius: 14, padding: "18px 32px", fontSize: 17, fontWeight: 700, cursor: "pointer", letterSpacing: "0.02em", fontFamily: "inherit" }}>
+              🪑 Commander à une table
+            </button>
+            <button onClick={() => setView("cashier")}
+              style={{ background: "transparent", color: "#B89A6A", border: "1.5px solid #4A3000", borderRadius: 14, padding: "16px 32px", fontSize: 15, cursor: "pointer", fontFamily: "inherit" }}>
+              🧾 Espace caissier
+            </button>
+          </div>
+          <p style={{ color: "#5C4020", fontSize: 13, marginTop: 40 }}>Simulateur de QR Code — scannez et commandez</p>
+        </div>
+        {notification && <Notif n={notification} />}
+      </div>
+    );
+  }
+
+  // ─── TABLE SELECT ────────────────────────────────────────
+  if (view === "table-select") {
+    return (
+      <div style={{ minHeight: "100vh", background: "#FDF6EC", fontFamily: "'Georgia', serif" }}>
+        <TopBar title="Choisir votre table" onBack={() => setView("home")} />
+        <div style={{ padding: 24, maxWidth: 480, margin: "0 auto" }}>
+          <p style={{ color: "#8C6B3E", fontSize: 15, marginBottom: 24, textAlign: "center" }}>Sélectionnez votre numéro de table</p>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(5, 1fr)", gap: 12 }}>
+            {TABLES.map((t) => (
+              <button key={t} onClick={() => { setSelectedTable(t); setOrderPlaced(false); setView("menu"); }}
+                style={{ background: "#1A0F00", color: "#F5E6C8", border: "none", borderRadius: 14, padding: "20px 0", fontSize: 22, fontWeight: 700, cursor: "pointer", fontFamily: "inherit", transition: "transform 0.1s", boxShadow: "0 4px 12px rgba(0,0,0,0.15)" }}>
+                {t}
+              </button>
+            ))}
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // ─── MENU ────────────────────────────────────────────────
+  if (view === "menu") {
+    const filtered = MENU.filter((i) => i.category === activeCategory);
+    return (
+      <div style={{ minHeight: "100vh", background: "#FDF6EC", fontFamily: "'Georgia', serif", paddingBottom: 100 }}>
+        <div style={{ background: "#1A0F00", padding: "20px 20px 16px", position: "sticky", top: 0, zIndex: 10 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 12, maxWidth: 600, margin: "0 auto" }}>
+            <button onClick={() => setView("table-select")} style={{ background: "none", border: "none", color: "#B89A6A", fontSize: 22, cursor: "pointer" }}>←</button>
+            <div style={{ flex: 1 }}>
+              <h2 style={{ color: "#F5E6C8", margin: 0, fontSize: 20, fontWeight: 700 }}>Café Lumière</h2>
+              <p style={{ color: "#8C6B3E", margin: 0, fontSize: 13 }}>Table {selectedTable}</p>
+            </div>
+            <button onClick={() => setView("cart")}
+              style={{ background: "#C8882A", color: "#FFF", border: "none", borderRadius: 24, padding: "10px 18px", fontSize: 14, fontWeight: 700, cursor: "pointer", fontFamily: "inherit", display: "flex", alignItems: "center", gap: 6 }}>
+              🛒 {cartCount > 0 && <span style={{ background: "#fff", color: "#C8882A", borderRadius: 10, padding: "0 6px", fontSize: 12, fontWeight: 800 }}>{cartCount}</span>}
+              {formatPrice(cartTotal)}
+            </button>
+          </div>
+          <div style={{ display: "flex", gap: 8, overflowX: "auto", marginTop: 14, maxWidth: 600, margin: "14px auto 0", paddingBottom: 4 }}>
+            {categories.map((cat) => (
+              <button key={cat} onClick={() => setActiveCategory(cat)}
+                style={{ background: activeCategory === cat ? "#C8882A" : "transparent", color: activeCategory === cat ? "#FFF" : "#8C6B3E", border: activeCategory === cat ? "none" : "1px solid #4A3000", borderRadius: 20, padding: "7px 16px", fontSize: 13, cursor: "pointer", whiteSpace: "nowrap", fontFamily: "inherit", flexShrink: 0 }}>
+                {cat}
+              </button>
+            ))}
+          </div>
+        </div>
+        <div style={{ padding: 16, maxWidth: 600, margin: "0 auto", display: "grid", gap: 12 }}>
+          {filtered.map((item) => {
+            const inCart = cart.find((c) => c.id === item.id);
+            return (
+              <div key={item.id} style={{ background: "#FFF", borderRadius: 16, padding: "16px", display: "flex", alignItems: "center", gap: 14, boxShadow: "0 2px 8px rgba(0,0,0,0.06)" }}>
+                <div style={{ fontSize: 36, width: 52, textAlign: "center" }}>{item.emoji}</div>
+                <div style={{ flex: 1 }}>
+                  <div style={{ fontWeight: 700, fontSize: 16, color: "#1A0F00" }}>{item.name}</div>
+                  <div style={{ color: "#8C6B3E", fontSize: 13, marginTop: 2 }}>{item.description}</div>
+                  <div style={{ color: "#C8882A", fontWeight: 700, fontSize: 16, marginTop: 6 }}>{formatPrice(item.price)}</div>
+                </div>
+                {inCart ? (
+                  <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                    <button onClick={() => updateQty(item.id, -1)} style={{ width: 32, height: 32, borderRadius: 8, border: "1.5px solid #E2C898", background: "#FFF8EE", color: "#C8882A", fontSize: 18, fontWeight: 700, cursor: "pointer" }}>−</button>
+                    <span style={{ fontWeight: 700, color: "#1A0F00", minWidth: 20, textAlign: "center" }}>{inCart.qty}</span>
+                    <button onClick={() => addToCart(item)} style={{ width: 32, height: 32, borderRadius: 8, border: "none", background: "#C8882A", color: "#FFF", fontSize: 18, fontWeight: 700, cursor: "pointer" }}>+</button>
+                  </div>
+                ) : (
+                  <button onClick={() => addToCart(item)}
+                    style={{ background: "#1A0F00", color: "#F5E6C8", border: "none", borderRadius: 10, padding: "10px 16px", fontSize: 13, fontWeight: 700, cursor: "pointer", fontFamily: "inherit" }}>
+                    Ajouter
+                  </button>
+                )}
+              </div>
+            );
+          })}
+        </div>
+        {notification && <Notif n={notification} />}
+      </div>
+    );
+  }
+
+  // ─── CART ────────────────────────────────────────────────
+  if (view === "cart") {
+    if (orderPlaced) {
+      return (
+        <div style={{ minHeight: "100vh", background: "#FDF6EC", fontFamily: "'Georgia', serif", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: 32, textAlign: "center" }}>
+          <div style={{ fontSize: 72, marginBottom: 20 }}>✅</div>
+          <h2 style={{ color: "#1A0F00", fontSize: 28, fontWeight: 700, margin: "0 0 12px" }}>Commande envoyée !</h2>
+          <p style={{ color: "#8C6B3E", fontSize: 16, maxWidth: 320 }}>Votre commande est transmise à la caisse. Vous serez servi très bientôt.</p>
+          <div style={{ background: "#FFF", borderRadius: 14, padding: "16px 24px", margin: "24px 0", boxShadow: "0 2px 12px rgba(0,0,0,0.08)" }}>
+            <p style={{ color: "#8C6B3E", margin: 0, fontSize: 14 }}>Table</p>
+            <p style={{ color: "#1A0F00", fontSize: 32, fontWeight: 700, margin: "4px 0" }}>{selectedTable}</p>
+          </div>
+          <button onClick={() => setView("menu")} style={{ background: "#C8882A", color: "#FFF", border: "none", borderRadius: 12, padding: "14px 28px", fontSize: 16, fontWeight: 700, cursor: "pointer", fontFamily: "inherit" }}>
+            Commander autre chose
+          </button>
+        </div>
+      );
+    }
+
+    return (
+      <div style={{ minHeight: "100vh", background: "#FDF6EC", fontFamily: "'Georgia', serif" }}>
+        <TopBar title={`Panier — Table ${selectedTable}`} onBack={() => setView("menu")} />
+        <div style={{ padding: 16, maxWidth: 500, margin: "0 auto", paddingBottom: 120 }}>
+          {cart.length === 0 ? (
+            <div style={{ textAlign: "center", padding: 48, color: "#8C6B3E" }}>
+              <div style={{ fontSize: 48, marginBottom: 12 }}>🛒</div>
+              <p>Votre panier est vide</p>
+              <button onClick={() => setView("menu")} style={{ background: "#C8882A", color: "#FFF", border: "none", borderRadius: 10, padding: "12px 24px", fontSize: 15, fontWeight: 700, cursor: "pointer", fontFamily: "inherit", marginTop: 8 }}>Voir le menu</button>
+            </div>
+          ) : (
+            <>
+              {cart.map((item) => (
+                <div key={item.id} style={{ background: "#FFF", borderRadius: 14, padding: 16, marginBottom: 10, display: "flex", alignItems: "center", gap: 12, boxShadow: "0 2px 6px rgba(0,0,0,0.05)" }}>
+                  <span style={{ fontSize: 28 }}>{item.emoji}</span>
+                  <div style={{ flex: 1 }}>
+                    <div style={{ fontWeight: 700, color: "#1A0F00" }}>{item.name}</div>
+                    <div style={{ color: "#C8882A", fontWeight: 700, fontSize: 15, marginTop: 2 }}>{formatPrice(item.price * item.qty)}</div>
+                  </div>
+                  <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                    <button onClick={() => updateQty(item.id, -1)} style={{ width: 30, height: 30, borderRadius: 8, border: "1.5px solid #E2C898", background: "#FFF8EE", color: "#C8882A", fontSize: 16, fontWeight: 700, cursor: "pointer" }}>−</button>
+                    <span style={{ fontWeight: 700, color: "#1A0F00", minWidth: 18, textAlign: "center" }}>{item.qty}</span>
+                    <button onClick={() => updateQty(item.id, 1)} style={{ width: 30, height: 30, borderRadius: 8, border: "none", background: "#C8882A", color: "#FFF", fontSize: 16, fontWeight: 700, cursor: "pointer" }}>+</button>
+                  </div>
+                </div>
+              ))}
+              <div style={{ background: "#1A0F00", borderRadius: 16, padding: 20, marginTop: 16, position: "sticky", bottom: 16 }}>
+                <div style={{ display: "flex", justifyContent: "space-between", color: "#B89A6A", fontSize: 14, marginBottom: 4 }}>
+                  <span>{cartCount} article{cartCount > 1 ? "s" : ""}</span>
+                  <span>Total</span>
+                </div>
+                <div style={{ display: "flex", justifyContent: "space-between", color: "#F5E6C8", fontSize: 24, fontWeight: 700, marginBottom: 16 }}>
+                  <span>Table {selectedTable}</span>
+                  <span>{formatPrice(cartTotal)}</span>
+                </div>
+                <button onClick={placeOrder}
+                  style={{ width: "100%", background: "#C8882A", color: "#FFF", border: "none", borderRadius: 12, padding: "16px", fontSize: 17, fontWeight: 700, cursor: "pointer", fontFamily: "inherit" }}>
+                  Envoyer la commande →
+                </button>
+              </div>
+            </>
+          )}
+        </div>
+        {notification && <Notif n={notification} />}
+      </div>
+    );
+  }
+
+  // ─── CASHIER ─────────────────────────────────────────────
+  if (view === "cashier") {
+    const tablesSummary = TABLES.map((t) => {
+      const tableOrders = liveOrders.filter((o) => o.table === t);
+      const total = tableOrders.reduce((s, o) => s + o.total, 0);
+      return { table: t, count: tableOrders.length, total, latest: tableOrders[0] };
+    }).filter((t) => t.count > 0);
+
+    return (
+      <div style={{ minHeight: "100vh", background: "#F8F4EE", fontFamily: "-apple-system, 'Segoe UI', sans-serif" }}>
+        <div style={{ background: "#1A0F00", padding: "18px 24px" }}>
+          <div style={{ maxWidth: 800, margin: "0 auto", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+            <div>
+              <h1 style={{ color: "#F5E6C8", margin: 0, fontSize: 22, fontWeight: 700 }}>☕ Café Lumière — Caisse</h1>
+              <p style={{ color: "#8C6B3E", margin: "4px 0 0", fontSize: 13 }}>{liveOrders.length} commande{liveOrders.length !== 1 ? "s" : ""} active{liveOrders.length !== 1 ? "s" : ""}</p>
+            </div>
+            <button onClick={() => setView("home")} style={{ background: "transparent", border: "1px solid #4A3000", color: "#B89A6A", borderRadius: 8, padding: "8px 14px", fontSize: 13, cursor: "pointer" }}>← Retour</button>
+          </div>
+        </div>
+
+        <div style={{ maxWidth: 800, margin: "0 auto", padding: 20 }}>
+          {/* Stats */}
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 12, marginBottom: 24 }}>
+            {[
+              { label: "Commandes actives", value: liveOrders.length, bg: "#FCEBEB", color: "#A32D2D" },
+              { label: "Tables occupées", value: tablesSummary.length, bg: "#FAEEDA", color: "#854F0B" },
+              { label: "CA encaissé", value: formatPrice(totalRevenue), bg: "#EAF3DE", color: "#3B6D11" },
+            ].map((s) => (
+              <div key={s.label} style={{ background: s.bg, borderRadius: 14, padding: "16px 18px", textAlign: "center" }}>
+                <div style={{ color: s.color, fontSize: 26, fontWeight: 800 }}>{s.value}</div>
+                <div style={{ color: s.color, fontSize: 12, marginTop: 4, opacity: 0.75 }}>{s.label}</div>
+              </div>
+            ))}
+          </div>
+
+          {/* Tabs */}
+          <div style={{ display: "flex", gap: 8, marginBottom: 20 }}>
+            {[["live", "Commandes actives"], ["tables", "Par table"], ["history", "Historique"]].map(([k, l]) => (
+              <button key={k} onClick={() => setCashierTab(k)}
+                style={{ background: cashierTab === k ? "#1A0F00" : "#FFF", color: cashierTab === k ? "#F5E6C8" : "#8C6B3E", border: "1.5px solid", borderColor: cashierTab === k ? "transparent" : "#E2C898", borderRadius: 10, padding: "9px 18px", fontSize: 14, fontWeight: cashierTab === k ? 700 : 400, cursor: "pointer" }}>
+                {l} {k === "live" && liveOrders.length > 0 && <span style={{ background: "#E24B4A", color: "#FFF", borderRadius: 10, padding: "1px 6px", fontSize: 11, marginLeft: 6 }}>{liveOrders.length}</span>}
+              </button>
+            ))}
+          </div>
+
+          {/* Live orders */}
+          {cashierTab === "live" && (
+            <div style={{ display: "grid", gap: 12 }}>
+              {liveOrders.length === 0 && <EmptyState text="Aucune commande active" icon="🎉" />}
+              {liveOrders.map((order) => (
+                <OrderCard key={order.id} order={order} onUpdate={updateOrderStatus} StatusBadge={StatusBadge} formatPrice={formatPrice} />
+              ))}
+            </div>
+          )}
+
+          {/* By table */}
+          {cashierTab === "tables" && (
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(200px, 1fr))", gap: 12 }}>
+              {TABLES.map((t) => {
+                const tOrders = liveOrders.filter((o) => o.table === t);
+                const total = tOrders.reduce((s, o) => s + o.total, 0);
+                const hasOrder = tOrders.length > 0;
+                return (
+                  <div key={t} style={{ background: hasOrder ? "#FFF" : "#F8F4EE", borderRadius: 14, padding: "18px", border: hasOrder ? "2px solid #C8882A" : "1.5px solid #E2C898", transition: "all 0.2s" }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
+                      <span style={{ fontSize: 28, fontWeight: 800, color: hasOrder ? "#C8882A" : "#C5B89A" }}>T{t}</span>
+                      {hasOrder && <span style={{ background: "#FCEBEB", color: "#A32D2D", fontSize: 11, fontWeight: 700, padding: "3px 8px", borderRadius: 8 }}>{tOrders.length} cmd</span>}
+                    </div>
+                    {hasOrder ? (
+                      <>
+                        <div style={{ fontSize: 20, fontWeight: 800, color: "#1A0F00" }}>{formatPrice(total)}</div>
+                        <div style={{ fontSize: 12, color: "#8C6B3E", marginTop: 4 }}>
+                          {tOrders.map((o) => <StatusBadge key={o.id} status={o.status} />)}
+                        </div>
+                      </>
+                    ) : (
+                      <div style={{ color: "#C5B89A", fontSize: 13 }}>Libre</div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          )}
+
+          {/* History */}
+          {cashierTab === "history" && (
+            <div style={{ display: "grid", gap: 10 }}>
+              {paidOrders.length === 0 && <EmptyState text="Aucune commande encaissée" icon="💳" />}
+              {paidOrders.map((order) => (
+                <div key={order.id} style={{ background: "#FFF", borderRadius: 12, padding: "14px 16px", border: "1px solid #E2C898", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                  <div>
+                    <span style={{ fontWeight: 700, color: "#1A0F00" }}>Table {order.table}</span>
+                    <span style={{ color: "#8C6B3E", fontSize: 13, marginLeft: 10 }}>{order.time}</span>
+                    <div style={{ fontSize: 12, color: "#B89A6A", marginTop: 4 }}>{order.items.map((i) => `${i.qty}× ${i.name}`).join(", ")}</div>
+                  </div>
+                  <div style={{ textAlign: "right" }}>
+                    <div style={{ fontWeight: 800, color: "#3B6D11", fontSize: 18 }}>{formatPrice(order.total)}</div>
+                    <StatusBadge status="payé" />
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+        {notification && <Notif n={notification} />}
+      </div>
+    );
+  }
+
+  return null;
+}
+
+function OrderCard({ order, onUpdate, StatusBadge, formatPrice }) {
+  const NEXT = { nouveau: "en préparation", "en préparation": "prêt", prêt: "servi", servi: "payé" };
+  const NEXT_LABEL = { nouveau: "▶ Préparer", "en préparation": "✓ Prêt", prêt: "🚀 Servir", servi: "💳 Encaisser" };
+  const [expanded, setExpanded] = useState(true);
+
+  return (
+    <div style={{ background: "#FFF", borderRadius: 16, border: "1.5px solid #E2C898", overflow: "hidden", boxShadow: "0 2px 8px rgba(0,0,0,0.05)" }}>
+      <div onClick={() => setExpanded(!expanded)} style={{ padding: "14px 18px", display: "flex", alignItems: "center", gap: 12, cursor: "pointer" }}>
+        <div style={{ background: "#FFF8EE", border: "2px solid #C8882A", borderRadius: 10, width: 44, height: 44, display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 800, fontSize: 18, color: "#C8882A", flexShrink: 0 }}>
+          T{order.table}
+        </div>
+        <div style={{ flex: 1 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4 }}>
+            <StatusBadge status={order.status} />
+            <span style={{ color: "#B89A6A", fontSize: 12 }}>{order.time}</span>
+          </div>
+          <div style={{ fontSize: 13, color: "#8C6B3E" }}>{order.items.length} article{order.items.length > 1 ? "s" : ""}</div>
+        </div>
+        <div style={{ fontWeight: 800, fontSize: 20, color: "#1A0F00" }}>{formatPrice(order.total)}</div>
+        <span style={{ color: "#C5B89A", fontSize: 16 }}>{expanded ? "▲" : "▼"}</span>
+      </div>
+      {expanded && (
+        <div style={{ borderTop: "1px solid #F0E8D8", padding: "12px 18px 16px" }}>
+          <div style={{ display: "grid", gap: 6, marginBottom: 14 }}>
+            {order.items.map((item) => (
+              <div key={item.id} style={{ display: "flex", justifyContent: "space-between", fontSize: 14 }}>
+                <span style={{ color: "#1A0F00" }}><span style={{ color: "#C8882A", fontWeight: 700 }}>{item.qty}×</span> {item.emoji} {item.name}</span>
+                <span style={{ color: "#8C6B3E" }}>{formatPrice(item.price * item.qty)}</span>
+              </div>
+            ))}
+          </div>
+          {NEXT[order.status] && (
+            <button onClick={() => onUpdate(order.id, NEXT[order.status])}
+              style={{ width: "100%", background: "#1A0F00", color: "#F5E6C8", border: "none", borderRadius: 10, padding: "12px", fontSize: 14, fontWeight: 700, cursor: "pointer" }}>
+              {NEXT_LABEL[order.status]}
+            </button>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function TopBar({ title, onBack }) {
+  return (
+    <div style={{ background: "#1A0F00", padding: "16px 20px", display: "flex", alignItems: "center", gap: 12, position: "sticky", top: 0, zIndex: 10 }}>
+      <button onClick={onBack} style={{ background: "none", border: "none", color: "#B89A6A", fontSize: 22, cursor: "pointer", padding: 0 }}>←</button>
+      <h2 style={{ color: "#F5E6C8", margin: 0, fontSize: 18, fontWeight: 700 }}>{title}</h2>
+    </div>
+  );
+}
+
+function EmptyState({ text, icon }) {
+  return (
+    <div style={{ textAlign: "center", padding: 48, color: "#B89A6A" }}>
+      <div style={{ fontSize: 42, marginBottom: 12 }}>{icon}</div>
+      <p style={{ fontSize: 15 }}>{text}</p>
+    </div>
+  );
+}
+
+function Notif({ n }) {
+  return (
+    <div style={{ position: "fixed", bottom: 24, left: "50%", transform: "translateX(-50%)", background: n.type === "success" ? "#1A0F00" : "#A32D2D", color: "#F5E6C8", padding: "12px 24px", borderRadius: 24, fontSize: 14, fontWeight: 600, zIndex: 999, boxShadow: "0 4px 16px rgba(0,0,0,0.25)", whiteSpace: "nowrap", fontFamily: "'Georgia', serif" }}>
+      {n.msg}
+    </div>
+  );
+}
