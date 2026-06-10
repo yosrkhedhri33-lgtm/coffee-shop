@@ -1,21 +1,93 @@
 import { useState } from "react";
 
 const MENU = [
-  { id: 1, category: "Cafés chauds", name: "Espresso", price: 2.5, description: "Intense et corsé", emoji: "☕", prep: 2 },
-  { id: 2, category: "Cafés chauds", name: "Cappuccino", price: 4.0, description: "Mousse de lait soyeuse", emoji: "☕", prep: 3 },
-  { id: 3, category: "Cafés chauds", name: "Latte", price: 4.5, description: "Doux et crémeux", emoji: "☕", prep: 3 },
-  { id: 4, category: "Cafés chauds", name: "Flat White", price: 4.2, description: "Café australien intense", emoji: "☕", prep: 3 },
-  { id: 5, category: "Cafés chauds", name: "Americano", price: 3.0, description: "Long et équilibré", emoji: "☕", prep: 2 },
-  { id: 6, category: "Cafés froids", name: "Cold Brew", price: 5.0, description: "Infusé 12h à froid", emoji: "🧊", prep: 1 },
-  { id: 7, category: "Cafés froids", name: "Iced Latte", price: 5.5, description: "Rafraîchissant et doux", emoji: "🧊", prep: 2 },
-  { id: 8, category: "Cafés froids", name: "Frappuccino", price: 6.0, description: "Frappé onctueux", emoji: "🧊", prep: 3 },
-  { id: 9, category: "Boissons", name: "Chocolat chaud", price: 4.0, description: "Riche et réconfortant", emoji: "🍫", prep: 3 },
-  { id: 10, category: "Boissons", name: "Thé matcha", price: 4.5, description: "Cérémonie japonaise", emoji: "🍵", prep: 3 },
-  { id: 11, category: "Boissons", name: "Jus d'orange", price: 3.5, description: "Pressé frais", emoji: "🍊", prep: 2 },
-  { id: 12, category: "Snacks", name: "Croissant", price: 2.5, description: "Beurré, feuilleté", emoji: "🥐", prep: 1 },
-  { id: 13, category: "Snacks", name: "Muffin myrtilles", price: 3.0, description: "Moelleux et fruité", emoji: "🧁", prep: 1 },
-  { id: 14, category: "Snacks", name: "Cookie chocolat", price: 2.8, description: "Croustillant et fondant", emoji: "🍪", prep: 1 },
-  { id: 15, category: "Snacks", name: "Avocado toast", price: 7.5, description: "Pain au levain", emoji: "🥑", prep: 5 },
+  { id: 1, category: "Café", name: "Espresso", price: 2, emoji: "☕"},
+  { id: 2, category: "Café", name: "Cappucin", price: 3, emoji: "☕" },
+  { id: 3, category: "Café", name: "Cafe creme", price: 3.5, emoji: "☕"},
+  { id: 4, category: "Café", name: "Noisette", price: 5, emoji: "☕"},
+  { id: 5, category: "Café", name: "Caaramel", price: 5, emoji: "☕"},
+  { id: 6, category: "Café", name: "Nescafe", price: 4, emoji: "☕"},
+  { id: 7, category: "Café", name: "Americain", price: 3, emoji: "☕"},
+  { id: 8, category: "Café", name: "Chocolat au lait", price: 0, emoji: "☕"},
+  { id: 9, category: "Café", name: "Chocolat chaud", price: 5, emoji: "☕"},
+  { id: 10, category: "Café", name: "Chocolat chaud chantilly", price: 0, emoji: "☕"},
+  { id: 11, category: "Café", name: "Chocolat chaud fruits secs", price: 0, emoji: "☕"},
+  { id: 12, category: "Café", name: "Cappuccino", price: 5, emoji: "☕"},
+  { id: 13, category: "Café", name: "Cappuccino chantilly", price: 0, emoji: "☕"},
+  { id: 14, category: "Café", name: "Chocoline", price: 3.5 , emoji: "☕"},
+  { id: 15, category: "Café", name: "Liegois", price: 5, emoji: "☕"},
+  { id: 16, category: "Café", name: "Cafe special ", price: 3.5, emoji: "☕"},
+  { id: 17, category: "Café", name: "Cafe creme special ", price: 0, emoji: "☕"},
+  { id: 18, category: "Café", name: "Cafe glacé", price: 5, emoji: "☕"},
+  { id: 19, category: "Café", name: "Cafe turc", price: 5, emoji: "☕"},
+  { id: 20, category: "Jus", name: "Jus de orange", price: 0, emoji: "☕"},
+  { id: 21, category: "Jus", name: "Citronade", price: 3, emoji: "☕"},
+  { id: 22, category: "Jus", name: "Jus de Citronade a la menthe", price: 3.5, emoji: "☕"},
+  { id: 23, category: "Jus", name: "Citronade grenadine", price: 3.5, emoji: "☕"},
+  { id: 24, category: "Jus", name: "Jus de kiwi & peche", price: 0, emoji: "☕"},
+  { id: 25, category: "Jus", name: "Jus de fraise", price: 5, emoji: "☕"},
+  { id: 26, category: "Jus", name: "Jus de figue", price: 0, emoji: "☕"},
+  { id: 27, category: "Mojito", name: "Blue mojito", price: 6, emoji: "☕"},
+  { id: 28, category: "Mojito", name: "Mojito fraise", price: 6, emoji: "☕"},
+  { id: 29, category: "Mojito", name: "Mojito Ananas", price: 6, emoji: "☕"},
+  { id: 30, category: "Mojito", name: "Mojito exotique", price: 6, emoji: "☕"},
+  { id: 31, category: "Mojito", name: "Mojito pasteque", price: 6, emoji: "☕"},
+  { id: 32, category: "Mojito", name: "Mojito framboise", price: 6, emoji: "☕"},
+  { id: 33, category: "Mojito", name: "Mojito fruit de passion", price: 6, emoji: "☕"},
+  { id: 34, category: "Mojito", name: "Mojito virgin", price: 6, emoji: "☕"},
+  { id: 35, category: "Milk Shake", name: "Milk Shake fraise", price: 6, emoji: "☕"},
+  { id: 36, category: "Milk Shake", name: "Milk Shake chocolat", price: 6, emoji: "☕"},
+  { id: 37, category: "Milk Shake", name: "Milk Shake citron", price: 6, emoji: "☕"},
+  { id: 38, category: "Milk Shake", name: "Milk Shake pistache", price: 6, emoji: "☕"},
+  { id: 39, category: "Milk Shake", name: "Milk Shake caramel", price: 6, emoji: "☕"},
+  { id: 40, category: "Milk Shake", name: "Milk Shake vanille", price: 6, emoji: "☕"},
+  { id: 41, category: "Milk Shake", name: "Milk Shake noisette", price: 6, emoji: "☕"},
+  { id: 42, category: "Milk Shake", name: "Milk Shake fruits sec", price: 8, emoji: "☕"},
+  { id: 43, category: "Thé", name: "Thé simple", price: 2, emoji: "☕"},
+  { id: 44, category: "Thé", name: "Thé a la menthe", price: 2.5, emoji: "☕"},
+  { id: 45, category: "Thé", name: "Thé amande", price: 4, emoji: "☕"},
+  { id: 46, category: "Thé", name: "Thé Pignon", price: 5, emoji: "☕"},
+  { id: 47, category: "Thé", name: "Thé baklawa", price: 6, emoji: "☕"},
+  { id: 48, category: "Glaces", name: "Glaces 2 boules", price: 4, emoji: "☕"},
+  { id: 49, category: "Glaces", name: "Glaces 3 boules", price: 5, emoji: "☕"},
+// BOISSONS
+{ id: 50, category: "Boisson", name: "Eau 1L", price: 1.5, emoji: "🥤" },
+{ id: 51, category: "Boisson", name: "Canette Fanta", price: 2.5, emoji: "🥤" },
+{ id: 52, category: "Boisson", name: "Canette Coca", price: 2.5, emoji: "🥤" },
+{ id: 53, category: "Boisson", name: "Canette Apla", price: 2.5, emoji: "🥤" },
+{ id: 54, category: "Boisson", name: "Canette Boga", price: 2.5, emoji: "🥤" },
+{ id: 55, category: "Boisson", name: "Canette Sprite", price: 2.5, emoji: "🥤" },
+{ id: 56, category: "Boisson", name: "Boga Menthe", price: 3, emoji: "🥤" },
+
+// DESSERTS
+{ id: 57, category: "Dessert", name: "Fondant Chocolat", price: 0, emoji: "🍰" },
+{ id: 58, category: "Dessert", name: "Cheesecake", price: 0, emoji: "🍰" },
+{ id: 59, category: "Dessert", name: "Tiramisu", price: 6, emoji: "🍰" },
+
+// CRÊPES
+{ id: 60, category: "Crêpe", name: "Crêpe Chocolat", price: 7, emoji: "🥞" },
+{ id: 61, category: "Crêpe", name: "Crêpe Nutella", price: 9, emoji: "🥞" },
+{ id: 62, category: "Crêpe", name: "Crêpe Chocolat Fruits Secs", price: 10, emoji: "🥞" },
+{ id: 63, category: "Crêpe", name: "Crêpe Noisette", price: 11, emoji: "🥞" },
+{ id: 64, category: "Crêpe", name: "Crêpe Spéciale", price: 12, emoji: "🥞" },
+{ id: 65, category: "Crêpe", name: "Crêpe Banane Nutella", price: 12, emoji: "🥞" },
+
+// CHICHA
+{ id: 66, category: "Chicha", name: "Chicha Pomme Fekher", price: 7, emoji: "💨" },
+{ id: 67, category: "Chicha", name: "Chicha Love Fekher", price: 7, emoji: "💨" },
+{ id: 68, category: "Chicha", name: "Chicha Raisin Fekher", price: 7, emoji: "💨" },
+{ id: 69, category: "Chicha", name: "Chicha Menthe Fekher", price: 7.5, emoji: "💨" },
+{ id: 70, category: "Chicha", name: "Chicha Glason", price: 9, emoji: "💨" },
+
+// CRÊPES SALÉES
+{ id: 71, category: "Crêpe", name: "Crêpe Buffalo", price: 8.5, emoji: "🌯" },
+{ id: 72, category: "Crêpe", name: "Crêpe Thon Fromage", price: 8.5, emoji: "🌯" },
+
+
+
+
+
+
 ];
 
 const TABLES = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
