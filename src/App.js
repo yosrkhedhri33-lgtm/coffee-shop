@@ -100,7 +100,7 @@ const MENU = [
 
 const TABLES = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
 
-const formatPrice = (p) => Number(p).toFixed(2) + " €";
+const formatPrice = (p) => Number(p).toFixed(2) + " DT";
 const now = () => new Date().toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" });
 
 export default function App() {
