@@ -103,9 +103,29 @@ const TABLES = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
 const formatPrice = (p) => Number(p).toFixed(2) + " DT";
 const now = () => new Date().toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" });
 
+// ─── LECTURE DU PARAMÈTRE ?table= DANS L'URL DU QR CODE ──
+// Chaque table a son propre QR code qui pointe vers :
+//   https://votre-site.com/?table=1
+//   https://votre-site.com/?table=2
+//   etc.
+// Quand le client scanne, l'appli détecte le numéro et ouvre
+// directement le menu, sans passer par l'accueil.
+function getTableFromURL() {
+  try {
+    const params = new URLSearchParams(window.location.search);
+    const t = parseInt(params.get("table"), 10);
+    if (!isNaN(t) && TABLES.includes(t)) return t;
+  } catch (e) {
+    // pas d'accès à l'URL (environnement de prévisualisation), on ignore
+  }
+  return null;
+}
+
 export default function App() {
-  const [view, setView] = useState("home");
-  const [selectedTable, setSelectedTable] = useState(null);
+  // Si l'URL contient ?table=X valide, on démarre directement sur le menu
+  const [tableFromQR] = useState(() => getTableFromURL());
+  const [view, setView] = useState(tableFromQR ? "menu" : "home");
+  const [selectedTable, setSelectedTable] = useState(tableFromQR);
   const [cart, setCart] = useState([]);
   const [activeCategory, setActiveCategory] = useState("Café");
   const [orderPlaced, setOrderPlaced] = useState(false);
@@ -211,7 +231,9 @@ export default function App() {
       <div style={{ minHeight: "100vh", background: "#FDF6EC", fontFamily: "'Georgia', serif", paddingBottom: 100 }}>
         <div style={{ background: "#1A0F00", padding: "20px 20px 16px", position: "sticky", top: 0, zIndex: 10 }}>
           <div style={{ display: "flex", alignItems: "center", gap: 12, maxWidth: 600, margin: "0 auto" }}>
-            <button onClick={() => setView("table-select")} style={{ background: "none", border: "none", color: "#B89A6A", fontSize: 22, cursor: "pointer" }}>←</button>
+            {!tableFromQR && (
+              <button onClick={() => setView("table-select")} style={{ background: "none", border: "none", color: "#B89A6A", fontSize: 22, cursor: "pointer" }}>←</button>
+            )}
             <div style={{ flex: 1 }}>
               <h2 style={{ color: "#F5E6C8", margin: 0, fontSize: 20, fontWeight: 700 }}>Café Lumière</h2>
               <p style={{ color: "#8C6B3E", margin: 0, fontSize: 13 }}>Table {selectedTable}</p>
